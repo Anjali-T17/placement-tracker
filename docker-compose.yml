@@ -32,7 +32,7 @@ services:
     container_name: placement-frontend
     restart: unless-stopped
     ports:
-      - "5500:80"
+      - "${FRONTEND_PORT:-5500}:80"
     depends_on:
       backend:
         condition: service_healthy
