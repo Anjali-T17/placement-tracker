@@ -11,7 +11,14 @@ pipeline {
         stage('GitHub Checkout') {
             steps {
                 echo 'Stage 1: Checking out latest code from GitHub main branch...'
-                git branch: 'main', url: 'https://github.com/Anjali-T17/placement-tracker.git'
+                sh '''
+                    if [ -d ".git" ]; then
+                        git fetch origin main
+                        git reset --hard origin/main
+                    else
+                        git clone -b main https://github.com/Anjali-T17/placement-tracker.git .
+                    fi
+                '''
             }
         }
 
