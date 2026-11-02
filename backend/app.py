@@ -1,5 +1,6 @@
 """Flask entry point for the College Placement Application Tracker API."""
 from flask import Flask, jsonify, request
+from prometheus_flask_exporter import PrometheusMetrics
 
 from config import Config
 from errors import register_error_handlers
@@ -43,6 +44,7 @@ def create_app():
 
 
 app = create_app()
+metrics = PrometheusMetrics(app)
 
 if __name__ == "__main__":
     app.run(host=Config.HOST, port=Config.PORT, debug=Config.DEBUG)
