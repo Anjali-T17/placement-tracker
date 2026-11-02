@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Management | Placement Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main">
+    <div id="topbar"></div>
+    <div class="content">
+      <div class="card">
+        <div class="card-head">
+          <div class="toolbar">
+            <input type="text" id="search" placeholder="Search name, roll no, email..." />
+            <select id="dept-filter">
+              <option value="">All Departments</option>
+              <option>AI &amp; DS</option><option>CSE</option><option>IT</option><option>ECE</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="openAdd()">+ Add Student</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Student</th><th>Department</th><th>CGPA</th><th>Backlogs</th><th>Skills</th><th>Placement</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add / Edit modal -->
+  <div class="modal-backdrop" id="student-modal">
+    <div class="modal">
+      <h2 id="modal-title">Add Student</h2>
+      <div class="form-grid">
+        <div class="form-group"><label>Full Name *</label><input id="f-name" /><div class="field-error" id="e-name"></div></div>
+        <div class="form-group"><label>Roll Number *</label><input id="f-roll" placeholder="21AD001" /><div class="field-error" id="e-roll"></div></div>
+        <div class="form-group"><label>Email *</label><input id="f-email" type="email" /><div class="field-error" id="e-email"></div></div>
+        <div class="form-group"><label>Department *</label>
+          <select id="f-dept"><option value="">Select</option><option>AI &amp; DS</option><option>CSE</option><option>IT</option><option>ECE</option></select>
+          <div class="field-error" id="e-dept"></div></div>
+        <div class="form-group"><label>CGPA (0 - 10) *</label><input id="f-cgpa" type="number" step="0.01" /><div class="field-error" id="e-cgpa"></div></div>
+        <div class="form-group"><label>Active Backlogs *</label><input id="f-back" type="number" min="0" value="0" /><div class="field-error" id="e-back"></div></div>
+        <div class="form-group"><label>Year</label>
+          <select id="f-year"><option>3</option><option selected>4</option></select></div>
+        <div class="form-group"><label>Placement Status</label>
+          <select id="f-placed"><option value="false">Not placed</option><option value="true">Placed</option></select></div>
+        <div class="form-group full"><label>Skills (comma separated)</label><input id="f-skills" placeholder="Python, SQL, ML" /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="closeModal('student-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveStudent()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    renderLayout("students", "Student Management", "Add, edit and track student records");
+    let editingId = null;
+    const $ = (id) => document.getElementById(id);
+
+    function render() {
+      const q = $("search").value.trim().toLowerCase();
+      const dept = $("dept-filter").value;
+      const list = DB.students.filter((s) =>
+        (!dept || s.department === dept) &&
+        (!q || [s.name, s.rollNo, s.email].some((v) => v.toLowerCase().includes(q))));
+      $("rows").innerHTML = list.length ? list.map((s) => `
+        <tr>
+          <td><div class="cell-main">${esc(s.name)}</div><div class="cell-sub">${esc(s.rollNo)} · ${esc(s.email)}</div></td>
+          <td>${esc(s.department)}</td>
+          <td><strong>${s.cgpa.toFixed(2)}</strong></td>
+          <td>${s.backlogs}</td>
+          <td class="cell-sub">${esc(s.skills)}</td>
+          <td><span class="badge ${s.placed ? "badge-placed" : "badge-unplaced"}">${s.placed ? "Placed" : "Not placed"}</span></td>
+          <td><div class="actions">
+            <button class="btn btn-outline btn-sm" onclick="openEdit(${s.id})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="removeStudent(${s.id})">Delete</button>
+          </div></td>
+        </tr>`).join("") : `<tr><td colspan="7" class="empty">No students found</td></tr>`;
+    }
+
+    function clearErrors() { document.querySelectorAll(".field-error").forEach((e) => (e.textContent = "")); }
+
+    function openAdd() {
+      editingId = null; clearErrors();
+      $("modal-title").textContent = "Add Student";
+      ["f-name","f-roll","f-email","f-skills","f-cgpa"].forEach((i) => ($(i).value = ""));
+      $("f-dept").value = ""; $("f-back").value = 0; $("f-year").value = "4"; $("f-placed").value = "false";
+      openModal("student-modal");
+    }
+
+    function openEdit(id) {
+      const s = DB.students.find((x) => x.id === id);
+      editingId = id; clearErrors();
+      $("modal-title").textContent = "Edit Student";
+      $("f-name").value = s.name; $("f-roll").value = s.rollNo; $("f-email").value = s.email;
+      $("f-dept").value = s.department; $("f-cgpa").value = s.cgpa; $("f-back").value = s.backlogs;
+      $("f-year").value = s.year; $("f-placed").value = String(s.placed); $("f-skills").value = s.skills;
+      openModal("student-modal");
+    }
+
+    function validate() {
+      clearErrors();
+      let ok = true;
+      const err = (id, msg) => { $(id).textContent = msg; ok = false; };
+      const name = $("f-name").value.trim(), roll = $("f-roll").value.trim().toUpperCase();
+      const email = $("f-email").value.trim(), cgpa = parseFloat($("f-cgpa").value);
+      const back = parseInt($("f-back").value, 10);
+      if (name.length < 2) err("e-name", "Name must be at least 2 characters");
+      if (!roll) err("e-roll", "Roll number is required");
+      else if (DB.students.some((s) => s.rollNo === roll && s.id !== editingId)) err("e-roll", "Roll number already exists");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) err("e-email", "Enter a valid email");
+      if (!$("f-dept").value) err("e-dept", "Select a department");
+      if (isNaN(cgpa) || cgpa < 0 || cgpa > 10) err("e-cgpa", "CGPA must be between 0 and 10");
+      if (isNaN(back) || back < 0) err("e-back", "Backlogs cannot be negative");
+      return ok;
+    }
+
+    async function saveStudent() {
+      if (!validate()) return;
+      const data = {
+        name: $("f-name").value.trim(), rollNo: $("f-roll").value.trim().toUpperCase(),
+        email: $("f-email").value.trim(), department: $("f-dept").value,
+        cgpa: parseFloat($("f-cgpa").value), backlogs: parseInt($("f-back").value, 10),
+        year: parseInt($("f-year").value, 10), skills: $("f-skills").value.trim(),
+        placed: $("f-placed").value === "true",
+      };
+      try {
+        if (editingId) { await api.put("/students/" + editingId, data); showToast("Student updated"); }
+        else { await api.post("/students", data); showToast("Student added"); }
+        closeModal("student-modal");
+        await refresh();
+      } catch (e) {
+        const map = { name: "e-name", rollNo: "e-roll", email: "e-email", department: "e-dept", cgpa: "e-cgpa", backlogs: "e-back" };
+        if (!showFieldErrors(e, map)) apiError(e);
+      }
+    }
+
+    async function removeStudent(id) {
+      if (!confirm("Delete this student? Their applications and interviews will also be deleted.")) return;
+      try { await api.delete("/students/" + id); showToast("Student deleted"); await refresh(); }
+      catch (e) { apiError(e); }
+    }
+
+    $("search").addEventListener("input", render);
+    $("dept-filter").addEventListener("change", render);
+    refresh().catch(apiError);
+  </script>
+</body>
+</html>

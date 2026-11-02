@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Applications | Placement Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main">
+    <div id="topbar"></div>
+    <div class="content">
+      <div class="card">
+        <div class="card-head">
+          <div class="toolbar">
+            <input type="text" id="search" placeholder="Search student or company..." />
+            <select id="status-filter">
+              <option value="">All Status</option>
+              <option>Applied</option><option>Shortlisted</option><option>Interview Scheduled</option><option>Selected</option><option>Rejected</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="openAdd()">+ New Application</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Student</th><th>Company / Role</th><th>Package</th><th>Applied On</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="app-modal">
+    <div class="modal">
+      <h2>New Application</h2>
+      <div class="form-grid">
+        <div class="form-group full"><label>Student *</label><select id="f-student"></select></div>
+        <div class="form-group full"><label>Job *</label><select id="f-job"></select></div>
+        <div class="form-group full" id="preview"></div>
+        <div class="field-error full" id="e-app"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="closeModal('app-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveApp()">Submit Application</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    renderLayout("applications", "Student Applications", "Students applying for company job openings");
+    const $ = (id) => document.getElementById(id);
+
+    function render() {
+      const q = $("search").value.trim().toLowerCase(), st = $("status-filter").value;
+      const list = DB.applications.filter((a) => {
+        const s = getStudent(a.studentId), j = getJob(a.jobId);
+        return (!st || a.status === st) && (!q || (s.name + " " + s.rollNo + " " + j.company).toLowerCase().includes(q));
+      }).sort((a, b) => b.appliedOn.localeCompare(a.appliedOn));
+      $("rows").innerHTML = list.length ? list.map((a) => {
+        const s = getStudent(a.studentId), j = getJob(a.jobId);
+        return `<tr>
+          <td><div class="cell-main">${esc(s.name)}</div><div class="cell-sub">${esc(s.rollNo)} · ${esc(s.department)}</div></td>
+          <td><div class="cell-main">${esc(j.company)}</div><div class="cell-sub">${esc(j.role)}</div></td>
+          <td>${j.package} LPA</td>
+          <td>${formatDate(a.appliedOn)}</td>
+          <td>${statusBadge(a.status)}</td>
+          <td><div class="actions">
+            <a class="btn btn-outline btn-sm" href="status.html">Track</a>
+            <button class="btn btn-danger btn-sm" onclick="removeApp(${a.id})">Withdraw</button>
+          </div></td></tr>`;
+      }).join("") : `<tr><td colspan="6" class="empty">No applications found</td></tr>`;
+    }
+
+    async function updatePreview() {
+      const sid = +$("f-student").value, jid = +$("f-job").value;
+      $("e-app").textContent = "";
+      if (!sid || !jid) { $("preview").innerHTML = ""; return; }
+      try {
+        const res = await api.get(`/eligibility/check?studentId=${sid}&jobId=${jid}`);
+        $("preview").innerHTML = `<div class="result-banner ${res.eligible ? "ok" : "no"}">
+          ${res.eligible ? "✔ Eligible to apply" : "✖ Not eligible for this job"}</div>${checksHtml(res)}`;
+      } catch (e) { apiError(e); }
+    }
+
+    function openAdd() {
+      $("f-student").innerHTML = `<option value="">Select student</option>` +
+        DB.students.map((s) => `<option value="${s.id}">${esc(s.name)} (${esc(s.rollNo)})</option>`).join("");
+      $("f-job").innerHTML = `<option value="">Select job</option>` +
+        DB.jobs.filter((j) => j.status === "Open").map((j) => `<option value="${j.id}">${esc(j.company)} — ${esc(j.role)}</option>`).join("");
+      $("preview").innerHTML = ""; $("e-app").textContent = "";
+      openModal("app-modal");
+    }
+
+    async function saveApp() {
+      const sid = +$("f-student").value, jid = +$("f-job").value;
+      if (!sid || !jid) { $("e-app").textContent = "Please select both a student and a job"; return; }
+      try {
+        await api.post("/applications", { studentId: sid, jobId: jid });
+        closeModal("app-modal"); showToast("Application submitted");
+        await refresh();
+      } catch (e) { $("e-app").textContent = e.message; }
+    }
+
+    async function removeApp(id) {
+      if (!confirm("Withdraw this application? Its interview (if any) will also be removed.")) return;
+      try { await api.delete("/applications/" + id); showToast("Application withdrawn"); await refresh(); }
+      catch (e) { apiError(e); }
+    }
+
+    $("f-student").addEventListener("change", updatePreview);
+    $("f-job").addEventListener("change", updatePreview);
+    $("search").addEventListener("input", render);
+    $("status-filter").addEventListener("change", render);
+    refresh().catch(apiError);
+  </script>
+</body>
+</html>

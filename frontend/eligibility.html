@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eligibility Check | Placement Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main">
+    <div id="topbar"></div>
+    <div class="content">
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-head"><h2>Check a student against a job</h2></div>
+        <div class="form-row">
+          <div class="form-group"><label>Student</label><select id="sel-student"></select></div>
+          <div class="form-group"><label>Job</label><select id="sel-job"></select></div>
+          <button class="btn btn-primary" onclick="runCheck()">Check Eligibility</button>
+        </div>
+        <div class="field-error" id="err" style="margin-top:8px"></div>
+      </div>
+
+      <div class="grid-2-even">
+        <div class="card">
+          <div class="card-head"><h2>Result</h2></div>
+          <div id="result" class="empty">Select a student and a job, then click “Check Eligibility”.</div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2 id="list-title">Eligible students for selected job</h2></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Student</th><th>Dept</th><th>CGPA</th><th>Backlogs</th><th>Result</th></tr></thead>
+              <tbody id="eligible-rows"><tr><td colspan="5" class="empty">Select a job to see the list</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    renderLayout("eligibility", "Eligibility Check", "Verify CGPA, backlogs, department and deadline rules");
+    const $ = (id) => document.getElementById(id);
+
+    async function init() {
+      await loadAll();
+      $("sel-student").innerHTML = `<option value="">Select student</option>` +
+        DB.students.map((s) => `<option value="${s.id}">${esc(s.name)} (${esc(s.rollNo)})</option>`).join("");
+      $("sel-job").innerHTML = `<option value="">Select job</option>` +
+        DB.jobs.map((j) => `<option value="${j.id}">${esc(j.company)} — ${esc(j.role)}${j.status === "Closed" ? " (Closed)" : ""}</option>`).join("");
+    }
+
+    async function runCheck() {
+      const sid = +$("sel-student").value, jid = +$("sel-job").value;
+      if (!sid || !jid) { $("err").textContent = "Please select both a student and a job"; return; }
+      $("err").textContent = "";
+      try {
+        const res = await api.get(`/eligibility/check?studentId=${sid}&jobId=${jid}`);
+        $("result").className = "";
+        $("result").innerHTML = `
+          <div class="result-banner ${res.eligible ? "ok" : "no"}">
+            ${res.eligible ? "✔ " : "✖ "}${esc(res.student.name)} is ${res.eligible ? "ELIGIBLE" : "NOT ELIGIBLE"} for ${esc(res.job.company)} (${esc(res.job.role)})</div>
+          ${checksHtml(res)}`;
+      } catch (e) { apiError(e); }
+    }
+
+    async function renderList() {
+      const jid = +$("sel-job").value;
+      if (!jid) return;
+      try {
+        const rows = await api.get("/eligibility/job/" + jid);
+        const j = getJob(jid);
+        $("list-title").textContent = `Eligibility for ${j.company} — ${j.role}`;
+        $("eligible-rows").innerHTML = rows.map((r) => `<tr>
+          <td><div class="cell-main">${esc(r.name)}</div><div class="cell-sub">${esc(r.rollNo)}</div></td>
+          <td>${esc(r.department)}</td><td>${r.cgpa.toFixed(2)}</td><td>${r.backlogs}</td>
+          <td><span class="badge ${r.eligible ? "badge-selected" : "badge-rejected"}">${r.eligible ? "Eligible" : "Not eligible"}</span></td></tr>`).join("");
+      } catch (e) { apiError(e); }
+    }
+
+    $("sel-job").addEventListener("change", renderList);
+    init().catch(apiError);
+  </script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Job Listings | Placement Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main">
+    <div id="topbar"></div>
+    <div class="content">
+      <div class="card">
+        <div class="card-head">
+          <div class="toolbar">
+            <input type="text" id="search" placeholder="Search company or role..." />
+            <select id="status-filter">
+              <option value="">All Status</option><option>Open</option><option>Closed</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="openAdd()">+ Post Job</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Company / Role</th><th>Package</th><th>Location</th><th>Eligibility</th><th>Deadline</th><th>Status</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="job-modal">
+    <div class="modal">
+      <h2 id="modal-title">Post Job</h2>
+      <div class="form-grid">
+        <div class="form-group"><label>Company *</label><input id="f-company" /><div class="field-error" id="e-company"></div></div>
+        <div class="form-group"><label>Role *</label><input id="f-role" /><div class="field-error" id="e-role"></div></div>
+        <div class="form-group"><label>Package (LPA) *</label><input id="f-package" type="number" step="0.1" /><div class="field-error" id="e-package"></div></div>
+        <div class="form-group"><label>Location *</label><input id="f-location" /><div class="field-error" id="e-location"></div></div>
+        <div class="form-group"><label>Minimum CGPA *</label><input id="f-mincgpa" type="number" step="0.1" /><div class="field-error" id="e-mincgpa"></div></div>
+        <div class="form-group"><label>Max Backlogs Allowed *</label><input id="f-maxback" type="number" min="0" value="0" /><div class="field-error" id="e-maxback"></div></div>
+        <div class="form-group"><label>Application Deadline *</label><input id="f-deadline" type="date" /><div class="field-error" id="e-deadline"></div></div>
+        <div class="form-group"><label>Status</label>
+          <select id="f-status"><option>Open</option><option>Closed</option></select></div>
+        <div class="form-group full"><label>Eligible Departments *</label>
+          <div class="toolbar" id="f-depts">
+            <label><input type="checkbox" value="AI &amp; DS" /> AI &amp; DS</label>
+            <label><input type="checkbox" value="CSE" /> CSE</label>
+            <label><input type="checkbox" value="IT" /> IT</label>
+            <label><input type="checkbox" value="ECE" /> ECE</label>
+          </div>
+          <div class="field-error" id="e-depts"></div></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="closeModal('job-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveJob()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    renderLayout("jobs", "Job Listings", "Post and manage company job openings");
+    let editingId = null;
+    const $ = (id) => document.getElementById(id);
+    const deptBoxes = () => [...document.querySelectorAll("#f-depts input")];
+
+    function render() {
+      const q = $("search").value.trim().toLowerCase();
+      const st = $("status-filter").value;
+      const list = DB.jobs.filter((j) =>
+        (!st || j.status === st) && (!q || (j.company + " " + j.role).toLowerCase().includes(q)));
+      $("rows").innerHTML = list.length ? list.map((j) => `
+        <tr>
+          <td><div class="cell-main">${esc(j.company)}</div><div class="cell-sub">${esc(j.role)}</div></td>
+          <td><strong>${j.package} LPA</strong></td>
+          <td>${esc(j.location)}</td>
+          <td><div>CGPA ≥ ${j.minCgpa} · Backlogs ≤ ${j.maxBacklogs}</div>
+              <div class="cell-sub">${esc(j.departments.join(", "))}</div></td>
+          <td>${formatDate(j.deadline)}</td>
+          <td>${statusBadge(j.status)}</td>
+          <td><div class="actions">
+            <button class="btn btn-outline btn-sm" onclick="openEdit(${j.id})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="removeJob(${j.id})">Delete</button>
+          </div></td>
+        </tr>`).join("") : `<tr><td colspan="7" class="empty">No jobs found</td></tr>`;
+    }
+
+    function clearErrors() { document.querySelectorAll(".field-error").forEach((e) => (e.textContent = "")); }
+
+    function openAdd() {
+      editingId = null; clearErrors();
+      $("modal-title").textContent = "Post Job";
+      ["f-company","f-role","f-package","f-location","f-mincgpa","f-deadline"].forEach((i) => ($(i).value = ""));
+      $("f-maxback").value = 0; $("f-status").value = "Open";
+      deptBoxes().forEach((b) => (b.checked = false));
+      openModal("job-modal");
+    }
+
+    function openEdit(id) {
+      const j = DB.jobs.find((x) => x.id === id);
+      editingId = id; clearErrors();
+      $("modal-title").textContent = "Edit Job";
+      $("f-company").value = j.company; $("f-role").value = j.role; $("f-package").value = j.package;
+      $("f-location").value = j.location; $("f-mincgpa").value = j.minCgpa; $("f-maxback").value = j.maxBacklogs;
+      $("f-deadline").value = j.deadline; $("f-status").value = j.status;
+      deptBoxes().forEach((b) => (b.checked = j.departments.includes(b.value)));
+      openModal("job-modal");
+    }
+
+    function validate() {
+      clearErrors();
+      let ok = true;
+      const err = (id, msg) => { $(id).textContent = msg; ok = false; };
+      if (!$("f-company").value.trim()) err("e-company", "Company is required");
+      if (!$("f-role").value.trim()) err("e-role", "Role is required");
+      const pkg = parseFloat($("f-package").value);
+      if (isNaN(pkg) || pkg <= 0) err("e-package", "Enter a valid package");
+      if (!$("f-location").value.trim()) err("e-location", "Location is required");
+      const mc = parseFloat($("f-mincgpa").value);
+      if (isNaN(mc) || mc < 0 || mc > 10) err("e-mincgpa", "Must be between 0 and 10");
+      const mb = parseInt($("f-maxback").value, 10);
+      if (isNaN(mb) || mb < 0) err("e-maxback", "Cannot be negative");
+      if (!$("f-deadline").value) err("e-deadline", "Deadline is required");
+      if (!deptBoxes().some((b) => b.checked)) err("e-depts", "Select at least one department");
+      return ok;
+    }
+
+    async function saveJob() {
+      if (!validate()) return;
+      const data = {
+        company: $("f-company").value.trim(), role: $("f-role").value.trim(),
+        package: parseFloat($("f-package").value), location: $("f-location").value.trim(),
+        minCgpa: parseFloat($("f-mincgpa").value), maxBacklogs: parseInt($("f-maxback").value, 10),
+        departments: deptBoxes().filter((b) => b.checked).map((b) => b.value),
+        deadline: $("f-deadline").value, status: $("f-status").value,
+      };
+      try {
+        if (editingId) { await api.put("/jobs/" + editingId, data); showToast("Job updated"); }
+        else { await api.post("/jobs", data); showToast("Job posted"); }
+        closeModal("job-modal");
+        await refresh();
+      } catch (e) {
+        const map = { company: "e-company", role: "e-role", package: "e-package", location: "e-location",
+                      minCgpa: "e-mincgpa", maxBacklogs: "e-maxback", deadline: "e-deadline", departments: "e-depts" };
+        if (!showFieldErrors(e, map)) apiError(e);
+      }
+    }
+
+    async function removeJob(id) {
+      if (!confirm("Delete this job listing? Its applications and interviews will also be deleted.")) return;
+      try { await api.delete("/jobs/" + id); showToast("Job deleted"); await refresh(); }
+      catch (e) { apiError(e); }
+    }
+
+    $("search").addEventListener("input", render);
+    $("status-filter").addEventListener("change", render);
+    refresh().catch(apiError);
+  </script>
+</body>
+</html>

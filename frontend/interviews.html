@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interview Scheduling | Placement Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main">
+    <div id="topbar"></div>
+    <div class="content">
+      <div class="card">
+        <div class="card-head">
+          <h2>Scheduled Interviews</h2>
+          <button class="btn btn-primary" onclick="openAdd()">+ Schedule Interview</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date &amp; Time</th><th>Student</th><th>Company / Role</th><th>Mode</th><th>Venue / Link</th><th>Actions</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="iv-modal">
+    <div class="modal">
+      <h2 id="modal-title">Schedule Interview</h2>
+      <div class="form-grid">
+        <div class="form-group full"><label>Application *</label><select id="f-app"></select><div class="field-error" id="e-app"></div></div>
+        <div class="form-group"><label>Date *</label><input type="date" id="f-date" /><div class="field-error" id="e-date"></div></div>
+        <div class="form-group"><label>Time *</label><input type="time" id="f-time" /><div class="field-error" id="e-time"></div></div>
+        <div class="form-group"><label>Mode *</label><select id="f-mode"><option>Online</option><option>Offline</option></select></div>
+        <div class="form-group"><label>Venue / Meeting Link *</label><input id="f-venue" placeholder="Google Meet / Seminar Hall A" /><div class="field-error" id="e-venue"></div></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="closeModal('iv-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveIv()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    renderLayout("interviews", "Interview Scheduling", "Schedule and manage interviews for shortlisted students");
+    const $ = (id) => document.getElementById(id);
+    let editingId = null;
+
+    function render() {
+      const list = [...DB.interviews].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+      $("rows").innerHTML = list.length ? list.map((iv) => {
+        const a = DB.applications.find((x) => x.id === iv.applicationId), s = getStudent(a.studentId), j = getJob(a.jobId);
+        return `<tr>
+          <td><div class="cell-main">${formatDate(iv.date)}</div><div class="cell-sub">${esc(iv.time)}</div></td>
+          <td><div class="cell-main">${esc(s.name)}</div><div class="cell-sub">${esc(s.rollNo)}</div></td>
+          <td><div class="cell-main">${esc(j.company)}</div><div class="cell-sub">${esc(j.role)}</div></td>
+          <td><span class="badge ${iv.mode === "Online" ? "badge-online" : "badge-offline"}">${iv.mode}</span></td>
+          <td>${esc(iv.venue)}</td>
+          <td><div class="actions">
+            <button class="btn btn-outline btn-sm" onclick="openEdit(${iv.id})">Reschedule</button>
+            <button class="btn btn-danger btn-sm" onclick="cancelIv(${iv.id})">Cancel</button>
+          </div></td></tr>`;
+      }).join("") : `<tr><td colspan="6" class="empty">No interviews scheduled</td></tr>`;
+    }
+
+    function fillAppSelect(selectedId) {
+      // Only shortlisted applications that have no interview yet (plus the one being edited)
+      const options = DB.applications.filter((a) =>
+        a.id === selectedId || (a.status === "Shortlisted" && !DB.interviews.some((i) => i.applicationId === a.id)));
+      $("f-app").innerHTML = options.length
+        ? `<option value="">Select shortlisted application</option>` + options.map((a) => {
+            const s = getStudent(a.studentId), j = getJob(a.jobId);
+            return `<option value="${a.id}">${esc(s.name)} → ${esc(j.company)} (${esc(j.role)})</option>`;
+          }).join("")
+        : `<option value="">No shortlisted applications available</option>`;
+      $("f-app").value = selectedId || "";
+      $("f-app").disabled = !!selectedId;
+    }
+
+    function clearErrors() { document.querySelectorAll(".field-error").forEach((e) => (e.textContent = "")); }
+
+    function openAdd() {
+      editingId = null; clearErrors();
+      $("modal-title").textContent = "Schedule Interview";
+      fillAppSelect(null);
+      $("f-date").min = todayISO(); $("f-date").value = ""; $("f-time").value = "";
+      $("f-mode").value = "Online"; $("f-venue").value = "";
+      openModal("iv-modal");
+    }
+
+    function openEdit(id) {
+      const iv = DB.interviews.find((i) => i.id === id);
+      editingId = id; clearErrors();
+      $("modal-title").textContent = "Reschedule Interview";
+      fillAppSelect(iv.applicationId);
+      $("f-date").min = todayISO(); $("f-date").value = iv.date; $("f-time").value = iv.time;
+      $("f-mode").value = iv.mode; $("f-venue").value = iv.venue;
+      openModal("iv-modal");
+    }
+
+    async function saveIv() {
+      clearErrors();
+      let ok = true;
+      const err = (id, m) => { $(id).textContent = m; ok = false; };
+      const appId = +$("f-app").value, date = $("f-date").value, time = $("f-time").value, venue = $("f-venue").value.trim();
+      if (!appId) err("e-app", "Select an application");
+      if (!date) err("e-date", "Pick a date"); else if (date < todayISO()) err("e-date", "Date cannot be in the past");
+      if (!time) err("e-time", "Pick a time");
+      if (!venue) err("e-venue", "Venue or link is required");
+      if (!ok) return;
+      const mode = $("f-mode").value;
+      try {
+        if (editingId) { await api.put("/interviews/" + editingId, { date, time, mode, venue }); showToast("Interview rescheduled"); }
+        else { await api.post("/interviews", { applicationId: appId, date, time, mode, venue }); showToast("Interview scheduled"); }
+        closeModal("iv-modal");
+        await refresh();
+      } catch (e) {
+        const map = { applicationId: "e-app", date: "e-date", time: "e-time", venue: "e-venue" };
+        if (!showFieldErrors(e, map)) apiError(e);
+      }
+    }
+
+    async function cancelIv(id) {
+      if (!confirm("Cancel this interview?")) return;
+      try { await api.delete("/interviews/" + id); showToast("Interview cancelled"); await refresh(); }
+      catch (e) { apiError(e); }
+    }
+
+    refresh().catch(apiError);
+  </script>
+</body>
+</html>

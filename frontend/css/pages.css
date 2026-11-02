@@ -1,0 +1,30 @@
+/* Styles for Applications, Eligibility, Interviews, Status pages */
+.check-row { display: flex; gap: 12px; padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; align-items: flex-start; }
+.check-row.pass { background: #f0fdf4; } .check-row.fail { background: #fef2f2; }
+.check-ico { font-weight: 700; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; color: #fff; flex-shrink: 0; margin-top: 2px; }
+.pass .check-ico { background: var(--success); } .fail .check-ico { background: var(--danger); }
+.result-banner { padding: 14px 16px; border-radius: 10px; font-weight: 700; margin-bottom: 14px; }
+.result-banner.ok { background: #dcfce7; color: #15803d; } .result-banner.no { background: #fee2e2; color: #b91c1c; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; align-items: end; }
+.badge-online { background: #e0f2fe; color: #0369a1; } .badge-offline { background: #fef3c7; color: #b45309; }
+
+.chips { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.chip { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; cursor: pointer; text-align: center; min-width: 110px; box-shadow: var(--shadow); }
+.chip .n { font-size: 22px; font-weight: 700; } .chip .t { font-size: 12px; color: var(--muted); }
+.chip.active { border-color: var(--primary); background: var(--primary-soft); }
+
+.track-card { margin-bottom: 16px; }
+.track-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.stepper { display: flex; align-items: center; margin: 6px 0 4px; }
+.step { flex: 1; text-align: center; position: relative; font-size: 12px; color: var(--muted); }
+.step .dot { width: 26px; height: 26px; border-radius: 50%; background: #e2e8f0; margin: 0 auto 6px; display: grid; place-items: center; font-size: 12px; color: #fff; position: relative; z-index: 1; }
+.step::before { content: ""; position: absolute; top: 12px; left: -50%; width: 100%; height: 3px; background: #e2e8f0; }
+.step:first-child::before { display: none; }
+.step.done .dot, .step.done::before { background: var(--primary); }
+.step.done { color: var(--text); font-weight: 600; }
+.step.bad .dot, .step.bad::before { background: var(--danger); }
+.step.bad { color: var(--danger); font-weight: 600; }
+.step.good .dot, .step.good::before { background: var(--success); }
+.step.good { color: var(--success); font-weight: 600; }
+.update-row { display: flex; gap: 8px; align-items: center; }
+@media (max-width: 800px) { .form-row { grid-template-columns: 1fr; } .step { font-size: 10px; } }

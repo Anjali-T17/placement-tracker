@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Application Status Tracking | Placement Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main">
+    <div id="topbar"></div>
+    <div class="content">
+      <div class="chips" id="chips"></div>
+      <div class="card" style="margin-bottom:20px">
+        <div class="toolbar">
+          <select id="student-filter"></select>
+          <input type="text" id="search" placeholder="Search company..." />
+        </div>
+      </div>
+      <div id="cards"></div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/layout.js"></script>
+  <script>
+    renderLayout("status", "Application Status Tracking", "Follow each application and update its status");
+    const $ = (id) => document.getElementById(id);
+    const FLOW = ["Applied", "Shortlisted", "Interview Scheduled", "Selected"];
+    const ALL = [...FLOW, "Rejected"];
+    let statusFilter = "";
+
+
+    function stepper(a) {
+      if (a.status === "Rejected") {
+        return `<div class="stepper">
+          <div class="step done"><div class="dot">✔</div>Applied</div>
+          <div class="step bad"><div class="dot">✖</div>Rejected</div></div>`;
+      }
+      const cur = FLOW.indexOf(a.status);
+      return `<div class="stepper">` + FLOW.map((st, i) => {
+        const cls = i < cur ? "done" : i === cur ? (st === "Selected" ? "good" : "done") : "";
+        return `<div class="step ${cls}"><div class="dot">${i <= cur ? "✔" : i + 1}</div>${st}</div>`;
+      }).join("") + `</div>`;
+    }
+
+    function renderChips() {
+      const chip = (label, val, n) => `<div class="chip ${statusFilter === val ? "active" : ""}" onclick="setFilter('${val}')">
+        <div class="n">${n}</div><div class="t">${label}</div></div>`;
+      $("chips").innerHTML = chip("All", "", DB.applications.length) +
+        ALL.map((st) => chip(st, st, DB.applications.filter((a) => a.status === st).length)).join("");
+    }
+
+    function setFilter(v) { statusFilter = v; render(); }
+
+    let filterBuilt = false;
+    function render() {
+      if (!filterBuilt) {
+        $("student-filter").innerHTML = `<option value="">All students</option>` +
+          DB.students.map((s) => `<option value="${s.id}">${esc(s.name)} (${esc(s.rollNo)})</option>`).join("");
+        filterBuilt = true;
+      }
+      renderChips();
+      const sid = +$("student-filter").value, q = $("search").value.trim().toLowerCase();
+      const list = DB.applications.filter((a) => {
+        const j = getJob(a.jobId);
+        return (!sid || a.studentId === sid) && (!statusFilter || a.status === statusFilter) &&
+               (!q || j.company.toLowerCase().includes(q));
+      }).sort((a, b) => b.appliedOn.localeCompare(a.appliedOn));
+
+      $("cards").innerHTML = list.length ? list.map((a) => {
+        const s = getStudent(a.studentId), j = getJob(a.jobId);
+        const iv = DB.interviews.find((i) => i.applicationId === a.id);
+        return `<div class="card track-card">
+          <div class="track-head">
+            <div><div class="cell-main" style="font-size:16px">${esc(s.name)} → ${esc(j.company)}</div>
+              <div class="cell-sub">${esc(j.role)} · ${j.package} LPA · Applied ${formatDate(a.appliedOn)}</div></div>
+            <div class="update-row">
+              ${statusBadge(a.status)}
+              <select id="sel-${a.id}">${ALL.map((st) => `<option ${st === a.status ? "selected" : ""}>${st}</option>`).join("")}</select>
+              <button class="btn btn-primary btn-sm" onclick="updateStatus(${a.id})">Update</button>
+            </div>
+          </div>
+          ${stepper(a)}
+          ${iv ? `<div class="cell-sub" style="margin-top:12px">📅 Interview: ${formatDate(iv.date)} at ${esc(iv.time)} · ${iv.mode} · ${esc(iv.venue)}</div>` : ""}
+        </div>`;
+      }).join("") : `<div class="card empty">No applications match your filters</div>`;
+    }
+
+    async function updateStatus(id) {
+      const a = DB.applications.find((x) => x.id === id);
+      const v = $("sel-" + id).value;
+      if (v === a.status) { showToast("Status is already " + v, "error"); return; }
+      try { await api.patch(`/applications/${id}/status`, { status: v }); showToast("Status updated to " + v); }
+      catch (e) { apiError(e); }
+      await refresh();
+    }
+
+    $("student-filter").addEventListener("change", render);
+    $("search").addEventListener("input", render);
+    refresh().catch(apiError);
+  </script>
+</body>
+</html>
