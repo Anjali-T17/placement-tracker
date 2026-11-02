@@ -1,5 +1,5 @@
 // Talks to the Flask backend (Phase 2). Replaces mock-data.js and logic.js.
-const API_BASE = "http://localhost:5001/api";
+const API_BASE = "/api";
 
 class ApiError extends Error {
   constructor(message, status, details) {
